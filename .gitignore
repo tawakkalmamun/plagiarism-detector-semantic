@@ -1,12 +1,24 @@
-# Python
+# =============================
+# 🧠 Base Python Ignore Rules
+# =============================
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*.py[codz]
 *$py.class
 *.so
 .Python
+
+# Virtual Environment
 venv/
 env/
 ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
 build/
 develop-eggs/
 dist/
@@ -19,14 +31,101 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
-venv/
-ENV/
-env/
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Logs
+logs/
+*.log
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py.cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django / Flask
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+
+# Scrapy / Sphinx / PyBuilder
+.scrapy
+docs/_build/
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# PyInstaller
+*.manifest
+*.spec
+
+# pyenv / pipenv / poetry / pdm / pixi / uv
+.pdm-python
+.pdm-build/
+.pixi
+__pypackages__/
+#pipenv
+#poetry.lock
+#pdm.lock
+#pixi.lock
+#uv.lock
+
+# Cython debug symbols
+cython_debug/
+
+# Spyder / Rope / mypy / Pyre / pytype
+.spyderproject
+.spyproject
+.ropeproject
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Abstra / Ruff / Cursor / Marimo
+.abstra/
+.ruff_cache/
+.pypirc
+.cursorignore
+.cursorindexingignore
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+
+# =============================
+# 🧩 Project-specific Rules
+# =============================
 
 # IDE
 .vscode/
@@ -34,20 +133,13 @@ env/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
 
 # Environment variables
 .env
 .env.local
 .env.*.local
-
-# Logs
-logs/
-*.log
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
 
 # Uploads & Results
 uploads/*
@@ -55,7 +147,7 @@ uploads/*
 results/*
 !results/.gitkeep
 
-# Models (SBERT akan auto-download)
+# Models (SBERT auto-download)
 models/
 .cache/
 
@@ -66,26 +158,23 @@ dist/
 .npm
 .eslintcache
 
-# OS
-.DS_Store
-Thumbs.db
-
 # Temporary files
 tmp/
 temp/
 *.tmp
 
-# Database (jika ada)
+# Database
 *.db
 *.sqlite
 *.sqlite3
 
-# PDF samples (terlalu besar untuk git)
+# PDF samples (too large for Git)
 *.pdf
 
-# Jupyter Notebook
-.ipynb_checkpoints/
-
-# Package files
+# Package archives
 *.tar.gz
 *.zip
+
+# =============================
+# End of File
+# =============================

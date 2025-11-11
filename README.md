@@ -3,6 +3,8 @@
 **Integrasi Google Custom Search Engine (CSE) dan Sentence-BERT**  
 Fakultas Teknik UNISMUH Makassar
 
+> Tagline: Sistem Deteksi Plagiarisme Semantik menggunakan Google CSE dan Sentence-BERT
+
 ## 📋 Deskripsi Project
 
 Sistem deteksi plagiarisme berbasis semantik yang mampu mendeteksi kemiripan makna (bukan hanya literal) pada abstrak skripsi mahasiswa. Sistem ini menggunakan:
