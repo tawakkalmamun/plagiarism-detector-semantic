@@ -9,12 +9,14 @@ pydantic-settings==2.1.0
 PyPDF2==3.0.1
 pdfplumber==0.10.3
 
-# Sentence-BERT & ML
+# Sentence-BERT & ML (Adjusted for Python 3.12 compatibility)
 sentence-transformers==2.2.2
-torch==2.1.0
-transformers==4.35.0
-scikit-learn==1.3.2
-numpy==1.24.3
+torch==2.2.0
+# Pin transformers to a version whose tokenizers wheels support Python 3.12 on Windows
+transformers==4.37.0
+tokenizers==0.15.2
+scikit-learn==1.5.2
+numpy==1.26.4
 
 # Google API & HTTP Requests
 google-api-python-client==2.108.0
@@ -33,7 +35,6 @@ pymongo==4.6.0
 
 # Utilities
 python-dotenv==1.0.0
-requests==2.31.0
 aiohttp==3.9.1
 httpx==0.25.2
 
@@ -44,10 +45,10 @@ loguru==0.7.2
 pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
-httpx==0.25.2
 
 # CORS
-python-cors==1.0.0
+# FastAPI sudah menyediakan CORS via: from fastapi.middleware.cors import CORSMiddleware
+# Dependensi 'python-cors' tidak ada di PyPI, jadi dihapus.
 
 # Progress Bar
 tqdm==4.66.1
