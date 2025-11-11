@@ -1,0 +1,7 @@
+This is a sample text for plagiarism detection testing. 
+
+Introduction to plagiarism detection systems and their importance in academic integrity. Methods and techniques in academic writing have evolved significantly over the years. Data analysis and statistical methods are crucial for understanding research patterns.
+
+Research methodology and framework must be carefully designed to ensure reliable results. Conclusion and future recommendations should be based on empirical evidence and thorough analysis.
+
+This sample text contains various segments that will be analyzed for potential plagiarism using our advanced detection system.
