@@ -17,6 +17,7 @@ transformers==4.37.0
 tokenizers==0.15.2
 scikit-learn==1.5.2
 numpy==1.26.4
+huggingface_hub==0.20.3  # Pinned to version that still provides cached_download and satisfies transformers>=0.19.3
 
 # Google API & HTTP Requests
 google-api-python-client==2.108.0

@@ -11,6 +11,8 @@ from sentence_transformers import SentenceTransformer, util
 from googleapiclient.discovery import build
 from loguru import logger
 import torch
+from functools import lru_cache
+
 
 
 class PlagiarismDetector:
@@ -23,9 +25,11 @@ class PlagiarismDetector:
         google_api_key: Optional[str] = None,
         google_cse_id: Optional[str] = None,
         model_name: str = "paraphrase-multilingual-mpnet-base-v2",
+        fallback_model_name: str = "all-MiniLM-L6-v2",
         similarity_threshold: float = 0.75,
         segment_size: int = 25,
-        overlap: int = 5
+        overlap: int = 5,
+        cache_size: int = 512
     ):
         """
         Inisialisasi Plagiarism Detector
@@ -43,19 +47,63 @@ class PlagiarismDetector:
         self.similarity_threshold = similarity_threshold
         self.segment_size = segment_size
         self.overlap = overlap
-        
-        # Load Sentence-BERT model
-        logger.info(f"Loading SBERT model: {model_name}")
-        self.model = SentenceTransformer(model_name)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.cache_size = cache_size
+
+        # Load Sentence-BERT model dengan fallback & logging yang lebih informatif
+        self.model_name = model_name
+        self.fallback_model_name = fallback_model_name
+        self.model = self._load_model_with_fallback()
+
+        # Simple embedding cache (LRU via decorator for text->embedding mapping)
+        # Cache tingkat instance untuk segment embeddings agar tidak dihitung ulang saat similarity antar banyak snippet.
+        self._segment_embedding_cache: Dict[str, torch.Tensor] = {}
         
         # Setup Google CSE
         if self.google_api_key and self.google_cse_id:
-            self.search_service = build("customsearch", "v1", developerKey=self.google_api_key)
+            try:
+                self.search_service = build("customsearch", "v1", developerKey=self.google_api_key)
+            except Exception as e:
+                logger.error(f"Gagal inisialisasi Google CSE: {e}")
+                self.search_service = None
         else:
             logger.warning("Google API credentials not provided. Search functionality disabled.")
             self.search_service = None
-        
+
         logger.info("PlagiarismDetector initialized successfully")
+
+    def _load_model_with_fallback(self):
+        """Memuat model utama dengan fallback ke model yang lebih ringan jika gagal."""
+        try:
+            logger.info(f"Memuat model SBERT utama: {self.model_name} (device={self.device})")
+            model = SentenceTransformer(self.model_name, device=self.device)
+            return model
+        except Exception as e:
+            logger.error(f"Gagal memuat model utama '{self.model_name}': {e}")
+            logger.info(f"Mencoba fallback model: {self.fallback_model_name}")
+            try:
+                model = SentenceTransformer(self.fallback_model_name, device=self.device)
+                logger.info("Fallback model berhasil dimuat")
+                return model
+            except Exception as e2:
+                logger.error(f"Fallback model juga gagal dimuat: {e2}")
+                raise RuntimeError("Tidak dapat memuat model SBERT apapun.")
+
+    @lru_cache(maxsize=1024)
+    def _encode_text_cached(self, text: str) -> torch.Tensor:
+        """Encode teks dengan cache LRU (per proses)."""
+        return self.model.encode(text, convert_to_tensor=True, device=self.device)
+
+    def _get_segment_embedding(self, text: str) -> torch.Tensor:
+        """Ambil embedding segment dari cache instance, jika penuh lakukan eviction sederhana."""
+        if text in self._segment_embedding_cache:
+            return self._segment_embedding_cache[text]
+        emb = self._encode_text_cached(text)
+        if len(self._segment_embedding_cache) >= self.cache_size:
+            # Evict first inserted (simple FIFO); bisa ditingkatkan ke LRU penuh bila perlu
+            self._segment_embedding_cache.pop(next(iter(self._segment_embedding_cache)))
+        self._segment_embedding_cache[text] = emb
+        return emb
     
     def preprocess_text(self, text: str) -> str:
         """
@@ -191,8 +239,8 @@ class PlagiarismDetector:
         """
         try:
             # Encode texts
-            embedding1 = self.model.encode(text1, convert_to_tensor=True)
-            embedding2 = self.model.encode(text2, convert_to_tensor=True)
+            embedding1 = self._get_segment_embedding(text1)
+            embedding2 = self._encode_text_cached(text2)
             
             # Calculate cosine similarity
             similarity = util.cos_sim(embedding1, embedding2).item()
@@ -234,11 +282,16 @@ class PlagiarismDetector:
             }
         
         # Hitung similarity dengan semua snippets
+        segment_embedding = self._get_segment_embedding(segment_text)
         matches = []
         for result in search_results:
             snippet = result['snippet']
-            similarity = self.calculate_similarity(segment_text, snippet)
-            
+            try:
+                snippet_embedding = self._encode_text_cached(snippet)
+                similarity = util.cos_sim(segment_embedding, snippet_embedding).item()
+            except Exception as e:
+                logger.error(f"Gagal hitung similarity snippet: {e}")
+                similarity = 0.0
             matches.append({
                 'snippet': snippet,
                 'similarity': similarity,
