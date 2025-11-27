@@ -178,3 +178,14 @@ temp/
 # =============================
 # End of File
 # =============================
+
+# Runtime artifacts
+backend/results/*.csv
+backend/server.pid
+backend/snippet_detect*.txt
+backend/snippet_small.txt
+backend/data/
+backend/uploads/corpus_skripsi/
+frontend/src/App.js.backup
+frontend/src/App.js.patch
+test_abstrak.txt
