@@ -8,6 +8,8 @@ import pdfplumber
 from typing import Optional, Dict
 from loguru import logger
 import re
+# OCR dinonaktifkan (diminta user), tidak lagi diimpor maupun dipakai.
+_ocr_available = False
 
 
 class PDFProcessor:
@@ -94,23 +96,34 @@ class PDFProcessor:
         Returns:
             Extracted text
         """
+        text = ""
         try:
             if self.use_pdfplumber:
-                return self.extract_text_pdfplumber(pdf_path)
+                text = self.extract_text_pdfplumber(pdf_path)
             else:
-                return self.extract_text_pypdf2(pdf_path)
-                
+                text = self.extract_text_pypdf2(pdf_path)
         except Exception as e:
-            # Fallback to alternative method
-            logger.warning(f"Primary extraction failed. Trying alternative method...")
+            logger.warning(f"Primary extraction failed: {e}")
+        
+        # Fallback jika text kosong atau gagal (method lain)
+        if not text or len(text.strip()) < 100:
+            logger.warning(f"Primary extraction returned insufficient text ({len(text)} chars). Trying alternative PDF method...")
+            alt_text = ''
             try:
                 if self.use_pdfplumber:
-                    return self.extract_text_pypdf2(pdf_path)
+                    alt_text = self.extract_text_pypdf2(pdf_path)
                 else:
-                    return self.extract_text_pdfplumber(pdf_path)
+                    alt_text = self.extract_text_pdfplumber(pdf_path)
+                if alt_text and len(alt_text.strip()) > len(text.strip()):
+                    text = alt_text
+                logger.info(f"Alternative PDF method extracted {len(alt_text)} chars (selected {len(text)}).")
             except Exception as e2:
-                logger.error(f"Both extraction methods failed: {e2}")
-                raise Exception("Failed to extract text from PDF")
+                logger.error(f"Alternative PDF method failed: {e2}")
+
+        if not text or len(text.strip()) < 30:
+            logger.warning("Final extracted text very short (<30 chars). Document may be scanned or empty (OCR disabled).")
+        
+        return text
     
     def extract_abstract(self, pdf_path: str) -> Optional[str]:
         """

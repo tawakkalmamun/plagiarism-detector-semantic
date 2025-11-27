@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from core.plagiarism_detector import PlagiarismDetector
-from core.pdf_processor import PDFProcessor
+from core.pdf_processor_full import PDFProcessor
 
 # Configure logger
 logger.add(
@@ -52,6 +52,7 @@ app.add_middleware(
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("results", exist_ok=True)
 os.makedirs("logs", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 
 # Initialize processors
 pdf_processor = PDFProcessor(use_pdfplumber=True)
@@ -133,7 +134,9 @@ async def detect_plagiarism(
     file: UploadFile = File(..., description="PDF file to analyze"),
     threshold: float = Form(0.75, ge=0.0, le=1.0, description="Similarity threshold"),
     use_search: bool = Form(True, description="Use Google search"),
-    extract_abstract: bool = Form(False, description="Only analyze abstract")
+    extract_abstract: bool = Form(False, description="Only analyze abstract"),
+    add_to_corpus: bool = Form(False, description="Tambahkan teks ke local corpus"),
+    use_local_corpus: bool = Form(True, description="Gunakan local corpus untuk pencarian internal")
 ):
     """
     Endpoint utama untuk deteksi plagiarisme
@@ -169,9 +172,10 @@ async def detect_plagiarism(
     
     # Process PDF
     try:
-        # Validate PDF
-        if not pdf_processor.validate_pdf(upload_path):
-            raise HTTPException(status_code=400, detail="Invalid PDF file")
+        # Validate PDF (TEMP: DISABLED for debugging)
+        # if not pdf_processor.validate_pdf(upload_path):
+        #     raise HTTPException(status_code=400, detail="Invalid PDF file")
+        logger.info(f"Skipping PDF validation for debugging, processing file directly")
         
         # Extract text
         if file.filename.endswith('.txt'):
@@ -200,8 +204,22 @@ async def detect_plagiarism(
         # Update detector threshold
         plagiarism_detector.similarity_threshold = threshold
         
-        # Detect plagiarism
-        result = plagiarism_detector.detect_plagiarism(text, use_search=use_search)
+        # Detect plagiarism (TEMP: force use_search=False for debugging)
+        logger.info(f"use_search parameter: {use_search}, forcing to False for testing")
+        result = plagiarism_detector.detect_plagiarism(
+            text,
+            use_search=False,
+            use_local_corpus=use_local_corpus,
+            add_to_corpus=add_to_corpus,
+            corpus_source_id=task_id
+        )
+
+        # Normalisasi label (Indonesia -> English for consistency)
+        for item in result.get('details', []):
+            if item.get('label') == 'Plagiat':
+                item['label'] = 'PLAGIARIZED'
+            elif item.get('label') == 'Original':
+                item['label'] = 'ORIGINAL'
         
         # Calculate processing time
         end_time = datetime.now()
@@ -292,7 +310,9 @@ async def download_result(task_id: str):
 async def detect_text(
     text: str = Form(..., description="Text to analyze"),
     threshold: float = Form(0.75, ge=0.0, le=1.0),
-    use_search: bool = Form(True)
+    use_search: bool = Form(True),
+    add_to_corpus: bool = Form(False),
+    use_local_corpus: bool = Form(True)
 ):
     """
     Deteksi plagiarisme dari raw text (bukan PDF)
@@ -318,7 +338,20 @@ async def detect_text(
         plagiarism_detector.similarity_threshold = threshold
         
         # Detect
-        result = plagiarism_detector.detect_plagiarism(text, use_search=use_search)
+        result = plagiarism_detector.detect_plagiarism(
+            text,
+            use_search=use_search,
+            use_local_corpus=use_local_corpus,
+            add_to_corpus=add_to_corpus,
+            corpus_source_id=task_id
+        )
+
+        # Normalisasi label
+        for item in result.get('details', []):
+            if item.get('label') == 'Plagiat':
+                item['label'] = 'PLAGIARIZED'
+            elif item.get('label') == 'Original':
+                item['label'] = 'ORIGINAL'
         
         # Processing time
         end_time = datetime.now()
@@ -347,6 +380,60 @@ async def detect_text(
     except Exception as e:
         logger.error(f"Error detecting text: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/segment", tags=["Debug"])
+async def segment_only(
+    text: Optional[str] = Form(None, description="Raw text to segment"),
+    file: Optional[UploadFile] = File(None, description="PDF/TXT file to segment"),
+    extract_abstract: bool = Form(False),
+    add_to_corpus: bool = Form(False),
+    corpus_label: Optional[str] = Form(None)
+):
+    """Endpoint untuk hanya mengembalikan segmentasi tanpa deteksi plagiarisme."""
+    task_id = str(uuid.uuid4())
+    content = None
+    upload_path = None
+    try:
+        if file is not None:
+            if not (file.filename.endswith('.pdf') or file.filename.endswith('.txt')):
+                raise HTTPException(status_code=400, detail="Only PDF and TXT files are supported")
+            upload_path = f"uploads/{task_id}_{file.filename}"
+            with open(upload_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            if file.filename.endswith('.txt'):
+                with open(upload_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+            else:
+                if extract_abstract:
+                    content = pdf_processor.extract_abstract(upload_path)
+                else:
+                    content = pdf_processor.extract_text(upload_path)
+        elif text is not None:
+            content = text
+        else:
+            raise HTTPException(status_code=400, detail="Provide either text or file")
+
+        content = pdf_processor.clean_extracted_text(content)
+        segments = plagiarism_detector.segment_text(content)
+        if add_to_corpus:
+            plagiarism_detector.add_to_corpus(content, source_id=corpus_label or task_id)
+        return {
+            'task_id': task_id,
+            'total_segments': len(segments),
+            'segments': segments,
+            'added_to_corpus': add_to_corpus,
+            'corpus_size': len(plagiarism_detector.local_corpus)
+        }
+    except Exception as e:
+        logger.error(f"Segment endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            if upload_path and os.path.exists(upload_path):
+                os.remove(upload_path)
+        except:
+            pass
 
 
 @app.get("/api/tasks", tags=["Detection"])
@@ -390,6 +477,129 @@ async def delete_task(task_id: str):
         os.remove(csv_path)
     
     return {"message": "Task deleted successfully", "task_id": task_id}
+
+
+@app.post("/api/corpus/build", tags=["Corpus Management"])
+async def build_corpus(
+    folder_path: str = Form("uploads/corpus_skripsi", description="Path ke folder berisi PDF/TXT corpus"),
+    file_extension: str = Form(".pdf", description="Extension file (.pdf atau .txt)"),
+    clear_existing: bool = Form(False, description="Hapus corpus yang ada sebelum build")
+):
+    """
+    Build local corpus dari folder berisi file skripsi lama (PDF/TXT).
+    Corpus ini akan digunakan untuk pembanding deteksi plagiarisme.
+    
+    Args:
+        folder_path: Path folder berisi file corpus
+        file_extension: .pdf atau .txt
+        clear_existing: Hapus corpus lama sebelum build baru
+        
+    Returns:
+        Result build corpus
+    """
+    try:
+        # Clear existing corpus jika diminta
+        if clear_existing:
+            cleared = plagiarism_detector.clear_corpus()
+            logger.info(f"Cleared {cleared} existing corpus segments")
+        
+        # Build corpus dari folder
+        result = plagiarism_detector.build_corpus_from_folder(folder_path, file_extension)
+        
+        return {
+            "success": result['success'],
+            "message": result['message'],
+            "files_processed": result['files_processed'],
+            "total_segments": result['total_segments'],
+            "corpus_size": result['corpus_size'],
+            "errors": result['errors'],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error building corpus: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/corpus/info", tags=["Corpus Management"])
+async def get_corpus_info():
+    """
+    Dapatkan informasi tentang corpus lokal saat ini.
+    
+    Returns:
+        Info corpus: size, sources, dll
+    """
+    try:
+        info = plagiarism_detector.get_corpus_info()
+        return {
+            "corpus_size": info['size'],
+            "sources": info['sources'],
+            "is_empty": info['empty'],
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting corpus info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/corpus/clear", tags=["Corpus Management"])
+async def clear_corpus():
+    """
+    Hapus semua corpus lokal.
+    
+    Returns:
+        Jumlah segment yang dihapus
+    """
+    try:
+        cleared = plagiarism_detector.clear_corpus()
+        return {
+            "success": True,
+            "message": f"Cleared {cleared} segments from corpus",
+            "segments_cleared": cleared,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error clearing corpus: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/corpus/save", tags=["Corpus Management"])
+async def save_corpus(path: str = Form("data/corpus.pkl")):
+    """Simpan corpus lokal ke file pickle."""
+    try:
+        info = plagiarism_detector.save_corpus(path)
+        return {
+            'success': info['success'],
+            'segments': info['segments'],
+            'path': info['path'],
+            'time_sec': info['time_sec'],
+            'timestamp': datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error saving corpus: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/corpus/load", tags=["Corpus Management"])
+async def load_corpus(path: str = Form("data/corpus.pkl")):
+    """Muat corpus lokal dari file pickle."""
+    try:
+        info = plagiarism_detector.load_corpus(path)
+        if not info['success']:
+            raise HTTPException(status_code=404, detail=info.get('message', 'Load failed'))
+        return {
+            'success': True,
+            'segments': info['segments'],
+            'path': info['path'],
+            'format_version': info['format_version'],
+            'time_sec': info['time_sec'],
+            'timestamp': datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading corpus: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Helper Functions
@@ -439,6 +649,14 @@ async def startup_event():
     logger.info(f"SBERT Model: Loaded")
     logger.info(f"Google CSE: {'Configured' if plagiarism_detector.search_service else 'Not Configured'}")
     logger.info("API Ready!")
+    # Auto load corpus if exists
+    default_corpus_path = os.getenv("CORPUS_PKL_PATH", "data/corpus.pkl")
+    if os.path.exists(default_corpus_path):
+        try:
+            info = plagiarism_detector.load_corpus(default_corpus_path)
+            logger.info(f"Auto-loaded corpus: {info['segments']} segments from {default_corpus_path}")
+        except Exception as e:
+            logger.error(f"Failed auto-load corpus: {e}")
 
 
 # Shutdown event

@@ -44,8 +44,29 @@ import './App.css';
 // Register ChartJS components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
-// API Base URL
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+47,48c47,65
+< // API Base URL
+< const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+---
+> // API Base URL - auto-detect
+> const API_URL = (() => {
+>   const envUrl = process.env.REACT_APP_API_URL;
+>   if (envUrl) return envUrl.trim();
+>   
+>   if (typeof window !== 'undefined') {
+>     const { hostname, origin } = window.location;
+>     // Di localhost, gunakan empty string (proxy akan forward)
+>     if (hostname === 'localhost' || hostname === '127.0.0.1') {
+>       return '';
+>     }
+>     // Di codespace, transform port
+>     if (origin.includes('-3000.')) return origin.replace('-3000.', '-8000.');
+>     if (origin.includes(':3000')) return origin.replace(':3000', ':8000');
+>   }
+>   
+>   return 'http://localhost:8000';
+> })();
+> console.log('[DEBUG] API_URL:', API_URL, 'hostname:', window.location?.hostname);
 
 function App() {
   // State Management
