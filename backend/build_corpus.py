@@ -112,6 +112,15 @@ def main():
         for src in info['sources'][:3]:
             print(f"   - {src['source_id']}: {src['segments']} segments")
     
+    # Save corpus to disk
+    if result['success'] and result['corpus_size'] > 0:
+        print(f"\n💾 Saving corpus to disk...")
+        save_result = detector.save_corpus('data/corpus.pkl')
+        if save_result['success']:
+            print(f"   ✅ Saved {save_result['segments']} segments to {save_result['path']}")
+        else:
+            print(f"   ⚠️  Warning: Could not save corpus to disk")
+    
     print("\n" + "="*60)
     if result['success']:
         print("✅ Corpus berhasil dibangun!")
