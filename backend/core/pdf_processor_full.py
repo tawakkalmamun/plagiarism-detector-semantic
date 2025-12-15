@@ -125,6 +125,134 @@ class PDFProcessor:
         
         return text
     
+    def extract_chapters_only(self, pdf_path: str, start_chapter: int = 1, end_chapter: int = 5) -> str:
+        """
+        Extract hanya konten dari Bab tertentu (skip sampul, kata pengantar, daftar isi)
+        
+        Args:
+            pdf_path: Path ke file PDF
+            start_chapter: Bab awal (default: 1)
+            end_chapter: Bab akhir (default: 5)
+            
+        Returns:
+            Text dari bab yang diminta saja
+        """
+        try:
+            full_text = self.extract_text(pdf_path)
+
+            # Hilangkan blok "Daftar Isi/Tabel/Gambar/Lampiran" agar tidak menangkap baris BAB di daftar isi
+            work_text = full_text
+            try:
+                toc_like_sections = [
+                    r"(?im)^\s*DAFTAR\s+ISI\b",
+                    r"(?im)^\s*DAFTAR\s+TABEL\b",
+                    r"(?im)^\s*DAFTAR\s+GAMBAR\b",
+                    r"(?im)^\s*DAFTAR\s+LAMPIRAN\b",
+                ]
+                toc_end_guard = r"(?im)^(\s*ABSTRAK\b|\s*ABSTRACT\b|\s*BAB\s+[IVX]+\b|\s*BAB\s+\d+\b)"
+                for sec in toc_like_sections:
+                    pattern = re.compile(sec + r".*?" + toc_end_guard, re.DOTALL | re.IGNORECASE | re.MULTILINE)
+                    work_text, n = re.subn(pattern, "", work_text)
+                    if n:
+                        logger.info(f"Removed TOC-like section using pattern: {sec} (occurrences: {n})")
+            except Exception as _:
+                # Abaikan jika pembersihan TOC gagal, lanjut dengan full_text
+                work_text = full_text
+            
+            # Pattern untuk mendeteksi BAB (berbagai format)
+            # Contoh: "BAB I", "BAB 1", "BAB I PENDAHULUAN", "BAB 1 PENDAHULUAN"
+            bab_patterns = []
+            
+            # Generate pattern untuk semua bab dari start sampai end
+            for i in range(start_chapter, end_chapter + 2):  # +2 untuk deteksi batas akhir
+                # Romawi
+                romawi = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+                if i <= len(romawi):
+                    # BAB I, Bab I, bab I
+                    bab_patterns.append(rf'(?i)^[\s]*BAB\s+{romawi[i-1]}\b')
+                # Angka arab
+                bab_patterns.append(rf'(?i)^[\s]*BAB\s+{i}\b')
+            
+            # Cari posisi setiap bab
+            bab_positions = []
+            for pattern in bab_patterns:
+                for match in re.finditer(pattern, work_text, re.MULTILINE):
+                    # Extract nomor bab dari match
+                    bab_text = match.group(0).upper()
+
+                    # Skip baris BAB yang berasal dari daftar isi (memiliki titik-titik pemimpin dan nomor halaman)
+                    # Ambil teks satu baris penuh tempat match terjadi
+                    line_start = work_text.rfind('\n', 0, match.start()) + 1
+                    line_end = work_text.find('\n', match.start())
+                    if line_end == -1:
+                        line_end = len(work_text)
+                    whole_line = work_text[line_start:line_end]
+                    if re.search(r"\.{3,}\s*\d+\s*$", whole_line):
+                        # Contoh: "BAB I PENDAHULUAN..................... 1" → skip (kemungkinan dari daftar isi)
+                        continue
+                    
+                    # Deteksi nomor bab
+                    romawi_map = {'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10}
+                    bab_num = None
+                    
+                    # Cek romawi
+                    for rom, num in romawi_map.items():
+                        if f' {rom}' in bab_text or f'{rom} ' in bab_text:
+                            bab_num = num
+                            break
+                    
+                    # Cek angka arab
+                    if not bab_num:
+                        match_digit = re.search(r'\d+', bab_text)
+                        if match_digit:
+                            bab_num = int(match_digit.group())
+                    
+                    if bab_num:
+                        bab_positions.append({
+                            'number': bab_num,
+                            'start': match.start(),
+                            'end': match.end()
+                        })
+            
+            # Sort berdasarkan posisi
+            bab_positions.sort(key=lambda x: x['start'])
+            
+            # Filter hanya bab yang diminta
+            filtered_babs = [b for b in bab_positions if start_chapter <= b['number'] <= end_chapter]
+            
+            if not filtered_babs:
+                logger.warning(f"BAB {start_chapter}-{end_chapter} tidak ditemukan. Menggunakan full text.")
+                return full_text
+            
+            # Ambil dari awal bab pertama sampai akhir bab terakhir
+            start_pos = filtered_babs[0]['start']
+            
+            # Cari batas akhir: bab setelah end_chapter atau "DAFTAR PUSTAKA"
+            end_pos = len(work_text)
+            
+            # Cari bab setelah end_chapter
+            next_babs = [b for b in bab_positions if b['number'] > end_chapter]
+            if next_babs:
+                end_pos = next_babs[0]['start']
+            
+            # Atau cari "DAFTAR PUSTAKA"
+            dafpus_match = re.search(r'(?i)^[\s]*DAFTAR\s+PUSTAKA\b', work_text[start_pos:], re.MULTILINE)
+            if dafpus_match:
+                dafpus_pos = start_pos + dafpus_match.start()
+                if dafpus_pos < end_pos:
+                    end_pos = dafpus_pos
+            
+            extracted = work_text[start_pos:end_pos].strip()
+            
+            logger.info(f"Extracted BAB {start_chapter}-{end_chapter}: {len(extracted)} chars (from {len(full_text)} total)")
+            logger.info(f"Found chapters: {[b['number'] for b in filtered_babs]}")
+            
+            return extracted
+            
+        except Exception as e:
+            logger.error(f"Error extracting chapters: {e}")
+            return self.extract_text(pdf_path)  # Fallback ke full text
+    
     def extract_abstract(self, pdf_path: str) -> Optional[str]:
         """
         Extract bagian abstrak dari PDF

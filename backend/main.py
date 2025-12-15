@@ -136,7 +136,10 @@ async def detect_plagiarism(
     use_search: bool = Form(True, description="Use Google search"),
     extract_abstract: bool = Form(False, description="Only analyze abstract"),
     add_to_corpus: bool = Form(False, description="Tambahkan teks ke local corpus"),
-    use_local_corpus: bool = Form(True, description="Gunakan local corpus untuk pencarian internal")
+    use_local_corpus: bool = Form(True, description="Gunakan local corpus untuk pencarian internal"),
+    chapters_only: bool = Form(False, description="Hanya ambil konten Bab 1-5 (skip sampul, kata pengantar, dll)"),
+    start_chapter: int = Form(1, ge=1, le=10, description="Bab awal (default: 1)"),
+    end_chapter: int = Form(5, ge=1, le=10, description="Bab akhir (default: 5)")
 ):
     """
     Endpoint utama untuk deteksi plagiarisme
@@ -146,6 +149,9 @@ async def detect_plagiarism(
         threshold: Threshold kemiripan (0.0 - 1.0)
         use_search: Gunakan Google search atau tidak
         extract_abstract: Hanya analisis abstrak atau full text
+        chapters_only: Filter hanya konten Bab tertentu (skip bagian awal)
+        start_chapter: Nomor bab awal untuk dianalisis
+        end_chapter: Nomor bab akhir untuk dianalisis
         
     Returns:
         Detection result dengan detail per segment
@@ -193,6 +199,10 @@ async def detect_plagiarism(
                 text = pdf_processor.extract_abstract(upload_path)
                 if not text:
                     raise HTTPException(status_code=400, detail="Abstract not found in PDF")
+            elif chapters_only:
+                # Extract hanya konten Bab tertentu (skip sampul, kata pengantar, dll)
+                text = pdf_processor.extract_chapters_only(upload_path, start_chapter, end_chapter)
+                logger.info(f"Extracted chapters {start_chapter}-{end_chapter}: {len(text)} chars")
             else:
                 text = pdf_processor.extract_text(upload_path)
         

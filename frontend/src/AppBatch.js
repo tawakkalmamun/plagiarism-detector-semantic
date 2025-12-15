@@ -38,6 +38,9 @@ function AppBatch() {
   const [threshold, setThreshold] = useState(0.75);
   const [useSearch, setUseSearch] = useState(true);
   const [extractAbstract, setExtractAbstract] = useState(false);
+  const [chaptersOnly, setChaptersOnly] = useState(false);
+  const [startChapter, setStartChapter] = useState(1);
+  const [endChapter, setEndChapter] = useState(5);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
@@ -70,6 +73,9 @@ function AppBatch() {
     fd.append('threshold', threshold);
     fd.append('use_search', useSearch);
     fd.append('extract_abstract', extractAbstract);
+    fd.append('chapters_only', chaptersOnly);
+    fd.append('start_chapter', startChapter);
+    fd.append('end_chapter', endChapter);
     try {
       const resp = await axios.post(`${API_URL}/api/detect`, fd, { headers: { 'Content-Type':'multipart/form-data' }, timeout:300000 });
       setResult(resp.data);
@@ -91,6 +97,9 @@ function AppBatch() {
       fd.append('threshold', threshold);
       fd.append('use_search', useSearch);
       fd.append('extract_abstract', extractAbstract);
+      fd.append('chapters_only', chaptersOnly);
+      fd.append('start_chapter', startChapter);
+      fd.append('end_chapter', endChapter);
       try {
         const resp = await axios.post(`${API_URL}/api/detect`, fd, { headers:{'Content-Type':'multipart/form-data'}, timeout:300000 });
         setBatchResults(prev => [...prev, {
@@ -157,7 +166,16 @@ function AppBatch() {
                 <Slider value={threshold} onChange={(e,v)=>setThreshold(v)} min={0.5} max={1.0} step={0.05} marks valueLabelDisplay="auto" />
               </Box>
               <FormControlLabel control={<Switch checked={useSearch} onChange={(e)=>setUseSearch(e.target.checked)} />} label="Gunakan Google Search" />
-              <FormControlLabel control={<Switch checked={extractAbstract} onChange={(e)=>setExtractAbstract(e.target.checked)} />} label="Hanya Analisis Abstrak" />
+              <FormControlLabel control={<Switch checked={extractAbstract} onChange={(e)=>setExtractAbstract(e.target.checked)} disabled={chaptersOnly} />} label="Hanya Analisis Abstrak" />
+              <FormControlLabel control={<Switch checked={chaptersOnly} onChange={(e)=>setChaptersOnly(e.target.checked)} />} label="Filter Bab (skip sampul, kata pengantar, dll)" />
+              {chaptersOnly && (
+                <Box sx={{ mt: 2, pl: 2 }}>
+                  <Typography variant="body2" gutterBottom>Bab Awal: {startChapter}</Typography>
+                  <Slider value={startChapter} onChange={(e, val)=>setStartChapter(val)} min={1} max={10} marks valueLabelDisplay="auto" sx={{ width:'200px' }} />
+                  <Typography variant="body2" gutterBottom sx={{ mt: 1 }}>Bab Akhir: {endChapter}</Typography>
+                  <Slider value={endChapter} onChange={(e, val)=>setEndChapter(val)} min={startChapter} max={10} marks valueLabelDisplay="auto" sx={{ width:'200px' }} />
+                </Box>
+              )}
               <Box sx={{ mt:2 }}>
                 <Button variant="outlined" size="small" onClick={handleHealthCheck} disabled={healthLoading}>{healthLoading ? 'Mengecek...' : 'Tes Koneksi API'}</Button>
                 {healthStatus && <Alert severity="success" sx={{ mt:1 }}>API OK • Model: {healthStatus.services?.sbert_model} • Google: {healthStatus.services?.google_cse}</Alert>}
