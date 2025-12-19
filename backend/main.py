@@ -215,10 +215,10 @@ async def detect_plagiarism(
         plagiarism_detector.similarity_threshold = threshold
         
         # Detect plagiarism (TEMP: force use_search=False for debugging)
-        logger.info(f"use_search parameter: {use_search}, forcing to False for testing")
+        # Honor client toggle: allow Google CSE if credentials tersedia; fallback ke korpus lokal jika dimatikan
         result = plagiarism_detector.detect_plagiarism(
             text,
-            use_search=False,
+            use_search=use_search,
             use_local_corpus=use_local_corpus,
             add_to_corpus=add_to_corpus,
             corpus_source_id=task_id
