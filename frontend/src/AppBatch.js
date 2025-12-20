@@ -31,7 +31,6 @@ const API_URL = (() => {
 
 function AppBatch() {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [selectedFilesBatch, setSelectedFilesBatch] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -46,9 +45,7 @@ function AppBatch() {
   const [healthStatus, setHealthStatus] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [lastHealthError, setLastHealthError] = useState(null);
-  const [batchResults, setBatchResults] = useState([]);
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  // Batch mode dihapus; hanya single PDF
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
@@ -56,13 +53,6 @@ function AppBatch() {
     if (file.type !== 'application/pdf') { setError('Hanya PDF didukung'); return; }
     if (file.size > 10 * 1024 * 1024) { setError('Maks 10MB'); return; }
     setSelectedFile(file); setError(null); setResult(null);
-  };
-
-  const handleMultiSelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    const valid = files.filter(f => f.type === 'application/pdf' && f.size <= 10 * 1024 * 1024);
-    if (valid.length !== files.length) setError('Beberapa file ditolak (format/ukuran)'); else setError(null);
-    setSelectedFilesBatch(valid.slice(0,50));
   };
 
   const handleDetect = async () => {
@@ -86,38 +76,6 @@ function AppBatch() {
     } finally { setLoading(false); }
   };
 
-  const handleBatchDetect = async () => {
-    if (!selectedFilesBatch.length) { setError('Pilih beberapa file PDF'); return; }
-    setBatchRunning(true); setBatchResults([]); setBatchProgress({ current:0, total:selectedFilesBatch.length }); setError(null);
-    for (let i=0;i<selectedFilesBatch.length;i++) {
-      const file = selectedFilesBatch[i];
-      setBatchProgress({ current: i+1, total: selectedFilesBatch.length });
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('threshold', threshold);
-      fd.append('use_search', useSearch);
-      fd.append('extract_abstract', extractAbstract);
-      fd.append('chapters_only', chaptersOnly);
-      fd.append('start_chapter', startChapter);
-      fd.append('end_chapter', endChapter);
-      try {
-        const resp = await axios.post(`${API_URL}/api/detect`, fd, { headers:{'Content-Type':'multipart/form-data'}, timeout:300000 });
-        setBatchResults(prev => [...prev, {
-          filename: file.name,
-          task_id: resp.data.task_id,
-          segments: resp.data.total_segments,
-          plagiarized: resp.data.plagiarized_segments,
-          percentage: resp.data.plagiarism_percentage,
-          processing_time: resp.data.processing_time,
-        }]);
-      } catch (err) {
-        let msg; if (err.response) msg = `(${file.name}) HTTP ${err.response.status}`; else if (err.request) msg = `(${file.name}) network`; else msg = `(${file.name}) ${err.message}`;
-        setBatchResults(prev => [...prev, { filename:file.name, task_id:null, segments:0, plagiarized:0, percentage:0, processing_time:0, error:msg }]);
-      }
-    }
-    setBatchRunning(false);
-  };
-
   const handleHealthCheck = async () => {
     setHealthLoading(true); setHealthStatus(null); setLastHealthError(null);
     try { const r = await axios.get(`${API_URL}/health`, { timeout:10000 }); setHealthStatus(r.data); }
@@ -131,7 +89,7 @@ function AppBatch() {
   };
 
   const handleReset = () => {
-    setSelectedFile(null); setSelectedFilesBatch([]); setResult(null); setError(null); setBatchResults([]); setBatchProgress({current:0,total:0});
+    setSelectedFile(null); setResult(null); setError(null);
   };
 
   const handleViewDetail = (seg) => { setSelectedSegment(seg); setDetailDialogOpen(true); };
@@ -155,10 +113,7 @@ function AppBatch() {
               <Box sx={{ my:2 }}>
                 <input accept="application/pdf,text/plain,.txt" style={{ display:'none' }} id="file-upload" type="file" onChange={handleFileSelect} />
                 <label htmlFor="file-upload"><Button variant="outlined" component="span" fullWidth startIcon={<CloudUpload />} sx={{ py:2 }}>Pilih File PDF</Button></label>
-                <input accept="application/pdf" style={{ display:'none' }} id="multi-upload" type="file" multiple onChange={handleMultiSelect} />
-                <label htmlFor="multi-upload"><Button variant="outlined" component="span" fullWidth startIcon={<CloudUpload />} sx={{ py:2, mt:1 }} color="secondary">Pilih Banyak PDF (Batch)</Button></label>
                 {selectedFile && <Alert severity="info" sx={{ mt:2 }}><strong>{selectedFile.name}</strong><br/>Ukuran: {(selectedFile.size/1024).toFixed(2)} KB</Alert>}
-                {selectedFilesBatch.length>0 && <Alert severity="info" sx={{ mt:2 }}><strong>{selectedFilesBatch.length} file dipilih</strong><br/>Contoh: {selectedFilesBatch.slice(0,3).map(f=>f.name).join(', ')}{selectedFilesBatch.length>3?' ...':''}</Alert>}
               </Box>
               <Typography variant="subtitle2" gutterBottom sx={{ mt:3 }}>⚙️ Pengaturan</Typography>
               <Box sx={{ my:2 }}>
@@ -183,10 +138,9 @@ function AppBatch() {
               </Box>
               <Box sx={{ mt:3 }}>
                 <Button variant="contained" fullWidth startIcon={<Assessment />} onClick={handleDetect} disabled={!selectedFile || loading} sx={{ mb:1 }}>{loading ? 'Memproses...' : 'Deteksi Plagiarisme'}</Button>
-                <Button variant="contained" color="secondary" fullWidth onClick={handleBatchDetect} disabled={batchRunning || !selectedFilesBatch.length} sx={{ mb:1 }}>{batchRunning ? `Batch (${batchProgress.current}/${batchProgress.total})...` : 'Deteksi Batch PDF'}</Button>
-                <Button variant="outlined" fullWidth startIcon={<Delete />} onClick={handleReset} disabled={loading || batchRunning}>Reset</Button>
+                <Button variant="outlined" fullWidth startIcon={<Delete />} onClick={handleReset} disabled={loading}>Reset</Button>
               </Box>
-              {(loading || batchRunning) && <Box sx={{ mt:2 }}><LinearProgress /><Typography variant="caption" align="center" display="block" sx={{ mt:1 }}>{batchRunning ? `Memproses batch ${batchProgress.current}/${batchProgress.total}...` : 'Menganalisis dokumen...'}</Typography></Box>}
+              {loading && <Box sx={{ mt:2 }}><LinearProgress /><Typography variant="caption" align="center" display="block" sx={{ mt:1 }}>Menganalisis dokumen...</Typography></Box>}
             </Paper>
           </Grid>
           <Grid item xs={12} md={8}>
@@ -214,17 +168,10 @@ function AppBatch() {
                 </Paper>
               </>
             )}
-            {batchResults.length>0 && (
-              <Paper sx={{ p:2, mt:3 }}>
-                <Typography variant="h6" gutterBottom>Ringkasan Batch</Typography>
-                <TableContainer><Table size="small"><TableHead><TableRow><TableCell><strong>File</strong></TableCell><TableCell align="center"><strong>Segmen</strong></TableCell><TableCell align="center"><strong>Plagiat</strong></TableCell><TableCell align="center"><strong>%</strong></TableCell><TableCell align="center"><strong>Waktu (s)</strong></TableCell><TableCell><strong>Status</strong></TableCell></TableRow></TableHead><TableBody>{batchResults.map((r,i)=>(<TableRow key={i}><TableCell>{r.filename}</TableCell><TableCell align="center">{r.segments}</TableCell><TableCell align="center">{r.plagiarized}</TableCell><TableCell align="center">{r.percentage}%</TableCell><TableCell align="center">{r.processing_time}</TableCell><TableCell>{r.error ? <Chip label="Error" color="error" size="small" /> : <Chip label="OK" color={r.percentage>50?'error':'success'} size="small" />}</TableCell></TableRow>))}</TableBody></Table></TableContainer>
-                <Box sx={{ mt:2 }}><Typography variant="caption" color="text.secondary">Selesai memproses {batchResults.length} file.</Typography></Box>
-              </Paper>
-            )}
-            {!result && !loading && !error && batchResults.length===0 && (
+            {!result && !loading && !error && (
               <Paper sx={{ p:5, textAlign:'center' }}>
                 <Typography variant="h6" color="text.secondary">📊 Hasil deteksi akan ditampilkan di sini</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt:1 }}>Upload satu PDF atau pilih banyak PDF untuk batch.</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt:1 }}>Upload satu PDF lalu jalankan deteksi.</Typography>
               </Paper>
             )}
           </Grid>
