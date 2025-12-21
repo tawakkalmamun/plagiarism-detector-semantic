@@ -649,6 +649,44 @@ def save_results_to_csv(details: List[dict], csv_path: str, filename: str):
         logger.error(f"Error saving to CSV: {e}")
 
 
+# Corpus auto-load helper (works even if lifespan events disabled)
+auto_corpus_loaded = False
+
+
+def try_auto_load_corpus():
+    """Load corpus once from common locations."""
+    global auto_corpus_loaded
+    if auto_corpus_loaded:
+        return
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.getenv("CORPUS_PKL_PATH"),
+        os.path.join(base_dir, "data/corpus.pkl"),
+        "data/corpus.pkl"
+    ]
+    default_corpus_path = None
+    for path in possible_paths:
+        if path and os.path.exists(path):
+            default_corpus_path = os.path.abspath(path)
+            break
+
+    if default_corpus_path:
+        logger.info(f"Auto-loading corpus from {default_corpus_path}")
+        try:
+            info = plagiarism_detector.load_corpus(default_corpus_path)
+            auto_corpus_loaded = True
+            logger.info(f"Auto-loaded corpus: {info['segments']} segments from {default_corpus_path}")
+        except Exception as e:
+            logger.error(f"Failed auto-load corpus: {e}")
+    else:
+        logger.warning("Corpus file not found; skipping auto-load. Set CORPUS_PKL_PATH or place data/corpus.pkl")
+
+
+# Run once on import (for --lifespan off)
+try_auto_load_corpus()
+
+
 # Startup event
 @app.on_event("startup")
 async def startup_event():
@@ -659,14 +697,7 @@ async def startup_event():
     logger.info(f"SBERT Model: Loaded")
     logger.info(f"Google CSE: {'Configured' if plagiarism_detector.search_service else 'Not Configured'}")
     logger.info("API Ready!")
-    # Auto load corpus if exists
-    default_corpus_path = os.getenv("CORPUS_PKL_PATH", "data/corpus.pkl")
-    if os.path.exists(default_corpus_path):
-        try:
-            info = plagiarism_detector.load_corpus(default_corpus_path)
-            logger.info(f"Auto-loaded corpus: {info['segments']} segments from {default_corpus_path}")
-        except Exception as e:
-            logger.error(f"Failed auto-load corpus: {e}")
+    try_auto_load_corpus()
 
 
 # Shutdown event

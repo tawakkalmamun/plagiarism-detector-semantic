@@ -35,6 +35,7 @@ import {
   Info,
   Delete,
   Visibility,
+  WifiTethering,
 } from '@mui/icons-material';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
@@ -44,29 +45,23 @@ import './App.css';
 // Register ChartJS components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
-47,48c47,65
-< // API Base URL
-< const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
----
-> // API Base URL - auto-detect
-> const API_URL = (() => {
->   const envUrl = process.env.REACT_APP_API_URL;
->   if (envUrl) return envUrl.trim();
->   
->   if (typeof window !== 'undefined') {
->     const { hostname, origin } = window.location;
->     // Di localhost, gunakan empty string (proxy akan forward)
->     if (hostname === 'localhost' || hostname === '127.0.0.1') {
->       return '';
->     }
->     // Di codespace, transform port
->     if (origin.includes('-3000.')) return origin.replace('-3000.', '-8000.');
->     if (origin.includes(':3000')) return origin.replace(':3000', ':8000');
->   }
->   
->   return 'http://localhost:8000';
-> })();
-> console.log('[DEBUG] API_URL:', API_URL, 'hostname:', window.location?.hostname);
+// API Base URL - auto-detect
+const API_URL = (() => {
+  const envUrl = process.env.REACT_APP_API_URL;
+  if (envUrl) return envUrl.trim();
+
+  if (typeof window !== 'undefined') {
+    const { hostname, origin } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return '';
+    }
+    if (origin.includes('-3000.')) return origin.replace('-3000.', '-8000.');
+    if (origin.includes(':3000')) return origin.replace(':3000', ':8000');
+  }
+
+  return 'http://localhost:8000';
+})();
+// console.log('[DEBUG] API_URL:', API_URL);
 
 function App() {
   // State Management
@@ -77,8 +72,14 @@ function App() {
   const [threshold, setThreshold] = useState(0.75);
   const [useSearch, setUseSearch] = useState(true);
   const [extractAbstract, setExtractAbstract] = useState(false);
+  const [chaptersOnly, setChaptersOnly] = useState(false);
+  const [startChapter, setStartChapter] = useState(1);
+  const [endChapter, setEndChapter] = useState(5);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState(null);
+  const [healthStatus, setHealthStatus] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState(null);
 
   // File Upload Handler
   const handleFileSelect = (event) => {
@@ -113,7 +114,11 @@ function App() {
     formData.append('file', selectedFile);
     formData.append('threshold', threshold);
     formData.append('use_search', useSearch);
+    formData.append('use_local_corpus', true);
     formData.append('extract_abstract', extractAbstract);
+    formData.append('chapters_only', chaptersOnly);
+    formData.append('start_chapter', startChapter);
+    formData.append('end_chapter', endChapter);
 
     try {
       const response = await axios.post(`${API_URL}/api/detect`, formData, {
@@ -127,6 +132,24 @@ function App() {
     } catch (err) {
       setError(err.response?.data?.detail || 'Terjadi kesalahan saat memproses file');
       setLoading(false);
+    }
+  };
+
+  const handleHealthCheck = async () => {
+    setHealthLoading(true);
+    setHealthStatus(null);
+    setHealthError(null);
+    try {
+      const resp = await axios.get(`${API_URL}/health`, { timeout: 10000 });
+      setHealthStatus(resp.data);
+    } catch (err) {
+      let msg = 'Health check gagal';
+      if (err.response) msg = `HTTP ${err.response.status}: ${err.response.data?.detail || 'Server error'}`;
+      else if (err.request) msg = 'Network/timeout';
+      else msg = err.message;
+      setHealthError(msg);
+    } finally {
+      setHealthLoading(false);
     }
   };
 
@@ -278,10 +301,72 @@ function App() {
                   <Switch
                     checked={extractAbstract}
                     onChange={(e) => setExtractAbstract(e.target.checked)}
+                    disabled={chaptersOnly}
                   />
                 }
                 label="Hanya Analisis Abstrak"
               />
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={chaptersOnly}
+                    onChange={(e) => setChaptersOnly(e.target.checked)}
+                  />
+                }
+                label="Filter Bab (skip sampul/kata pengantar)"
+              />
+
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<WifiTethering />}
+                  onClick={handleHealthCheck}
+                  disabled={healthLoading}
+                >
+                  {healthLoading ? 'Mengecek...' : 'Tes Koneksi API'}
+                </Button>
+                {healthStatus && (
+                  <Alert severity="success" sx={{ mt: 1 }}>
+                    API OK • Model: {healthStatus.services?.sbert_model} • Google: {healthStatus.services?.google_cse}
+                  </Alert>
+                )}
+                {healthError && (
+                  <Alert severity="error" sx={{ mt: 1 }} onClose={() => setHealthError(null)}>
+                    {healthError}
+                  </Alert>
+                )}
+              </Box>
+
+              {chaptersOnly && (
+                <Box sx={{ mt: 2, pl: 1 }}>
+                  <Typography variant="body2" gutterBottom>
+                    Bab Awal: {startChapter}
+                  </Typography>
+                  <Slider
+                    value={startChapter}
+                    onChange={(e, val) => setStartChapter(val)}
+                    min={1}
+                    max={10}
+                    step={1}
+                    marks
+                    valueLabelDisplay="auto"
+                  />
+                  <Typography variant="body2" gutterBottom sx={{ mt: 1 }}>
+                    Bab Akhir: {endChapter}
+                  </Typography>
+                  <Slider
+                    value={endChapter}
+                    onChange={(e, val) => setEndChapter(val)}
+                    min={startChapter}
+                    max={10}
+                    step={1}
+                    marks
+                    valueLabelDisplay="auto"
+                  />
+                </Box>
+              )}
 
               {/* Action Buttons */}
               <Box sx={{ mt: 3 }}>
@@ -448,7 +533,7 @@ function App() {
                               />
                             </TableCell>
                             <TableCell align="center">
-                              {segment.label === 'Plagiat' ? (
+                              {((segment.label || '').toUpperCase().includes('PLAGIAR')) ? (
                                 <Chip
                                   icon={<Warning />}
                                   label="Plagiat"
