@@ -64,7 +64,7 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 >     if (origin.includes(':3000')) return origin.replace(':3000', ':8000');
 >   }
 >   
->   return 'http://localhost:8000';
+>   return 'http://publiq:8000';
 > })();
 > console.log('[DEBUG] API_URL:', API_URL, 'hostname:', window.location?.hostname);
 
