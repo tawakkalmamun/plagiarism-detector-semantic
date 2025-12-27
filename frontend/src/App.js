@@ -539,9 +539,15 @@ function App() {
                     </Typography>
                     <Typography variant="body2">
                       <strong>Sumber:</strong>{' '}
-                      <a href={selectedSegment.source_url} target="_blank" rel="noopener noreferrer">
-                        {selectedSegment.source_title || selectedSegment.source_url}
-                      </a>
+                      {selectedSegment.source_url ? (
+                        <a href={selectedSegment.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
+                          {selectedSegment.source_title || selectedSegment.source_url}
+                        </a>
+                      ) : (
+                        <span style={{ color: '#666', fontStyle: 'italic' }}>
+                          {selectedSegment.source_title || selectedSegment.source_domain || 'Korpus Lokal'}
+                        </span>
+                      )}
                     </Typography>
                   </>
                 )}

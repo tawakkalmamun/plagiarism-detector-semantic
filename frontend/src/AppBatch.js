@@ -188,7 +188,21 @@ function AppBatch() {
                     <Typography variant="subtitle2" gutterBottom><strong>Teks Referensi Terdekat:</strong></Typography>
                     <Paper sx={{ p:2, mb:2, bgcolor:'#fff3e0' }}><Typography variant="body2">{selectedSegment.best_match}</Typography></Paper>
                     <Typography variant="body2"><strong>Skor Kemiripan:</strong> {(selectedSegment.similarity_score*100).toFixed(2)}%</Typography>
-                    {selectedSegment.source_url && <Typography variant="body2"><strong>Sumber:</strong> <a href={selectedSegment.source_url} target="_blank" rel="noopener noreferrer">{selectedSegment.source_title || selectedSegment.source_url}</a></Typography>}
+                    {selectedSegment.source_url ? (
+                      <Typography variant="body2">
+                        <strong>Sumber:</strong>{' '}
+                        <a href={selectedSegment.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
+                          {selectedSegment.source_title || selectedSegment.source_url}
+                        </a>
+                      </Typography>
+                    ) : selectedSegment.source_title || selectedSegment.source_domain ? (
+                      <Typography variant="body2">
+                        <strong>Sumber:</strong>{' '}
+                        <span style={{ color: '#666', fontStyle: 'italic' }}>
+                          {selectedSegment.source_title || selectedSegment.source_domain || 'Korpus Lokal'}
+                        </span>
+                      </Typography>
+                    ) : null}
                   </>
                 ) : <Alert severity="success">Tidak ada kecocokan signifikan (Original).</Alert>}
               </>
