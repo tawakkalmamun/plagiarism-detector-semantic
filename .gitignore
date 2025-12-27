@@ -147,6 +147,10 @@ uploads/*
 results/*
 !results/.gitkeep
 
+# Root data artifacts
+data/*.pkl
+data/corpus.pkl
+
 # Models (SBERT auto-download)
 models/
 .cache/
